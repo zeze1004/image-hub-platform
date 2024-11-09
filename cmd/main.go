@@ -12,8 +12,7 @@ func main() {
 	// 사용자 모듈 초기화
 	authController := initializers.InitUserModule(db)
 
-	// TODO: 이미지와 카테고리 모듈 및 Auth 미들웨어 초기화
-	//authMiddleware := initializers.InitAuthMiddleware()
+	authMiddleware := initializers.InitAuthMiddleware()
 
 	r := gin.Default()
 
@@ -23,11 +22,8 @@ func main() {
 		auth.POST("/login", authController.Login)
 	}
 
-	//api := r.Group("/api")
-	//api.Use(authMiddleware)
-	//{
-	//	// 이미지와 카테고리 관련 엔드포인트들 추가
-	//}
+	api := r.Group("/api")
+	api.Use(authMiddleware)
 
 	_ = r.Run()
 }
