@@ -23,6 +23,10 @@ type ImageService interface {
 	GetImageByID(imageID uint) (*models.Image, error)
 	DeleteImage(imageID uint) error
 	DeleteAllImagesByUser(userID uint) error
+	GetImagesByCategoryIDAndUserID(categoryID, userID uint) ([]models.Image, error)  // (유저) 특정 카테고리를 갖는 사용자의 이미지 조회
+	GetCategoriesByImageIDAndUserID(imageID, userID uint) ([]models.Category, error) // (유저) 특정 이미지의 카테고리 조회
+	GetImagesByCategoryID(categoryID uint) ([]models.Image, error)                   // (어드민) 특정 카테고리를 갖는 모든 이미지 조회
+	GetCategoriesByImageID(imageID uint) ([]models.Category, error)                  // (어드민) 특정 이미지에 속한 카테고리 조회
 }
 
 type imageService struct {
@@ -241,4 +245,33 @@ func (s *imageService) deleteImageFiles(image *models.Image) error {
 		return deleteErrors[0]
 	}
 	return nil
+}
+
+// GetCategoriesByImageID - 특정 이미지의 카테고리 조회
+func (s *imageService) GetCategoriesByImageID(imageID uint) ([]models.Category, error) {
+	return s.categoryRepo.GetCategoriesByImageID(imageID)
+}
+
+// GetImagesByCategoryID - 특정 카테고리를 가진 이미지 조회
+func (s *imageService) GetImagesByCategoryID(categoryID uint) ([]models.Image, error) {
+	return s.categoryRepo.GetImagesByCategoryID(categoryID)
+}
+
+// GetImagesByCategoryIDAndUserID - 특정 카테고리를 가진 사용자의 이미지 조회
+func (s *imageService) GetImagesByCategoryIDAndUserID(categoryID, userID uint) ([]models.Image, error) {
+	return s.categoryRepo.GetUserImagesByCategoryID(categoryID, userID)
+}
+
+// GetCategoriesByImageIDAndUserID - 특정 이미지의 카테고리 조회
+func (s *imageService) GetCategoriesByImageIDAndUserID(imageID, userID uint) ([]models.Category, error) {
+	image, err := s.imageRepo.GetImageByID(imageID)
+	if err != nil {
+		return nil, fmt.Errorf("이미지를 찾을 수 없습니다: %v", err)
+	}
+
+	if image.UserID != userID {
+		return nil, fmt.Errorf("이미지에 대한 권한이 없습니다")
+	}
+
+	return s.categoryRepo.GetCategoriesByImageID(imageID)
 }

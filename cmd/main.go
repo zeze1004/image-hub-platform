@@ -34,6 +34,11 @@ func main() {
 		// 이미지 삭제
 		userAPI.DELETE("/images", imageController.DeleteAllUserImages)
 		userAPI.DELETE("/images/:imageID", imageController.DeleteImage)
+		userAPI.GET("/images/:imageID/categories", imageController.GetCategoriesByImageID) // 카테고리별 이미지 조회
+
+		// 카테고리 API
+		categoryAPI := userAPI.Group("/categories")
+		categoryAPI.GET("/:categoryID/images", imageController.GetImagesByCategoryID)
 	}
 
 	// 관리자용 엔드포인트
@@ -47,6 +52,11 @@ func main() {
 		// 이미지 삭제
 		adminAPI.DELETE("/users/:userID/images", imageController.DeleteAllUserImages)
 		adminAPI.DELETE("/images/:imageID/", imageController.DeleteImage)
+		adminAPI.GET("/images/:imageID/categories", imageController.GetCategoriesByImageID) // 카테고리별 이미지 조회
+
+		// 카테고리 API
+		categoryAPI := adminAPI.Group("/categories")
+		categoryAPI.GET("/:categoryID/images", imageController.GetImagesByCategoryID)
 	}
 
 	_ = r.Run()
