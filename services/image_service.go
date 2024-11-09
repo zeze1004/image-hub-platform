@@ -27,6 +27,10 @@ type ImageService interface {
 	GetCategoriesByImageIDAndUserID(imageID, userID uint) ([]models.Category, error) // (유저) 특정 이미지의 카테고리 조회
 	GetImagesByCategoryID(categoryID uint) ([]models.Image, error)                   // (어드민) 특정 카테고리를 갖는 모든 이미지 조회
 	GetCategoriesByImageID(imageID uint) ([]models.Category, error)                  // (어드민) 특정 이미지에 속한 카테고리 조회
+	AddCategoryToImageByUser(imageID, categoryID uint, userID uint) error
+	AddCategoryToImageByAdmin(imageID, categoryID uint) error
+	RemoveCategoryFromImageByUser(imageID, categoryID uint, userID uint) error
+	RemoveCategoryFromImageByAdmin(imageID, categoryID uint) error
 }
 
 type imageService struct {
@@ -274,4 +278,105 @@ func (s *imageService) GetCategoriesByImageIDAndUserID(imageID, userID uint) ([]
 	}
 
 	return s.categoryRepo.GetCategoriesByImageID(imageID)
+}
+
+// AddCategoryToImage - 이미지에 카테고리 추가
+func (s *imageService) AddCategoryToImageByUser(imageID, categoryID, userID uint) error {
+	// 사용자 확인
+	image, err := s.imageRepo.GetImageByID(imageID)
+	if err != nil {
+		return fmt.Errorf("이미지를 찾을 수 없습니다")
+	}
+	if image.UserID != userID {
+		return fmt.Errorf("이미지에 대한 권한이 없습니다")
+	}
+
+	err = s.isValidCategoryID(categoryID)
+	if err != nil {
+		return err
+	}
+
+	// 카테고리 중복 검증
+	err = s.isDuplicateCategory(imageID, categoryID)
+	if err != nil {
+		return err
+	}
+
+	return s.imageCategoryRepo.AddCategoryToImage(imageID, categoryID)
+}
+
+// RemoveCategoryFromImage - 이미지에서 카테고리 제거
+func (s *imageService) RemoveCategoryFromImageByUser(imageID, categoryID, userID uint) error {
+	// 사용자 확인
+	image, err := s.imageRepo.GetImageByID(imageID)
+	if err != nil {
+		return fmt.Errorf("이미지를 찾을 수 없습니다")
+	}
+	if image.UserID != userID {
+		return fmt.Errorf("이미지에 대한 권한이 없습니다")
+	}
+
+	err = s.isValidCategoryID(categoryID)
+	if err != nil {
+		return err
+	}
+
+	err = s.isDuplicateCategory(imageID, categoryID)
+	if err == nil { // 중복 카테고리가 없으면
+		return fmt.Errorf("이미지에 카테고리가 없어서 삭제할 수 없습니다") // TODO: 500 에러 리턴되는 로직 수정
+	}
+
+	return s.imageCategoryRepo.RemoveCategoryFromImage(imageID, categoryID)
+}
+
+// AddCategoryToImageByAdmin - 이미지에 카테고리 추가
+func (s *imageService) AddCategoryToImageByAdmin(imageID, categoryID uint) error {
+	// 카테고리 중복 검증
+	err := s.isDuplicateCategory(imageID, categoryID)
+	if err != nil {
+		return err
+	}
+
+	err = s.isValidCategoryID(categoryID)
+	if err != nil {
+		return err
+	}
+
+	return s.imageCategoryRepo.AddCategoryToImage(imageID, categoryID)
+}
+
+// RemoveCategoryFromImageByAdmin - 이미지에서 카테고리 제거
+func (s *imageService) RemoveCategoryFromImageByAdmin(imageID, categoryID uint) error {
+	err := s.isDuplicateCategory(imageID, categoryID)
+	if err == nil { // 중복 카테고리가 없으면
+		return fmt.Errorf("이미지에 카테고리가 없어서 삭제할 수 없습니다")
+	}
+
+	err = s.isValidCategoryID(categoryID)
+	if err != nil {
+		return err
+	}
+
+	return s.imageCategoryRepo.RemoveCategoryFromImage(imageID, categoryID)
+}
+
+func (s *imageService) isDuplicateCategory(imageID uint, categoryID uint) error {
+	// 카테고리 중복 검증
+	categories, err := s.GetCategoriesByImageID(imageID)
+	if err != nil {
+		return err
+	}
+	for _, category := range categories {
+		if category.ID == categoryID {
+			return fmt.Errorf("이미지에 이미 등록된 카테고리입니다")
+		}
+	}
+	return nil
+}
+
+func (s *imageService) isValidCategoryID(categoryID uint) error {
+	if categoryID > 5 || categoryID < 1 {
+		return fmt.Errorf("잘못된 카테고리 ID입니다")
+	}
+	return nil
 }
