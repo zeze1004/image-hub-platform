@@ -176,3 +176,60 @@ func (c *ImageController) DeleteAllUserImages(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, gin.H{"message": "모든 이미지 삭제가 성공했습니다"})
 }
+
+// GetCategoriesByImageID 특정 이미지의 카테고리 조회
+func (c *ImageController) GetCategoriesByImageID(ctx *gin.Context) {
+	role := ctx.GetString("role")
+	userID := ctx.GetUint("userID")
+	imageID, err := strconv.ParseUint(ctx.Param("imageID"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 userID 파라미터입니다"})
+		return
+	}
+
+	if role == "USER" {
+		categories, err := c.imageService.GetCategoriesByImageIDAndUserID(uint(imageID), userID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, categories)
+		return
+	} else {
+		categories, err := c.imageService.GetCategoriesByImageID(uint(imageID))
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, categories)
+	}
+}
+
+// GetImagesByCategoryID - 특정 카테고리를 갖는 이미지 조회
+func (c *ImageController) GetImagesByCategoryID(ctx *gin.Context) {
+	role := ctx.GetString("role")
+	userID := ctx.GetUint("userID")
+	categoryID, err := strconv.ParseUint(ctx.Param("categoryID"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 categoryID 파라미터입니다"})
+		return
+	}
+
+	if role == "USER" {
+		images, err := c.imageService.GetImagesByCategoryIDAndUserID(uint(categoryID), userID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		ctx.JSON(http.StatusOK, images)
+		return
+	} else {
+		images, err := c.imageService.GetImagesByCategoryID(uint(categoryID))
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, images)
+	}
+}
