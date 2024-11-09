@@ -17,6 +17,9 @@ import (
 type ImageService interface {
 	UploadImage(ctx *gin.Context, fileName, description string, userID uint, categoryNames []string) (*models.Image, error)
 	GetThumbnail(imageID uint) (string, error)
+	GetImages() ([]models.Image, error)
+	GetImagesByUserID(userID uint) ([]models.Image, error)
+	GetImageByID(imageID uint) (*models.Image, error)
 }
 
 type imageService struct {
@@ -138,4 +141,31 @@ func (s *imageService) GetThumbnail(imageID uint) (string, error) {
 		return "", fmt.Errorf("썸네일 - 이미지를 가져오는데 실패했습니다: %v", err)
 	}
 	return uploadedImage.ThumbnailPath, nil
+}
+
+// GetImages - 모든 이미지 목록 조회
+func (s *imageService) GetImages() ([]models.Image, error) {
+	images, err := s.imageRepo.GetAllImages()
+	if err != nil {
+		return nil, fmt.Errorf("이미지 목록을 가져오는데 실패했습니다: %v", err)
+	}
+	return images, nil
+}
+
+// GetImagesByUserID - 특정 사용자의 이미지 목록 조회
+func (s *imageService) GetImagesByUserID(userID uint) ([]models.Image, error) {
+	images, err := s.imageRepo.GetImagesByUserID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("유저의 이미지 목록을 가져오는데 실패했습니다: %v", err)
+	}
+	return images, nil
+}
+
+// GetImageByID - 특정 이미지 조회
+func (s *imageService) GetImageByID(imageID uint) (*models.Image, error) {
+	image, err := s.imageRepo.GetImageByID(imageID)
+	if err != nil {
+		return nil, fmt.Errorf("이미지를 가져오는데 실패했습니다: %v", err)
+	}
+	return image, nil
 }

@@ -18,7 +18,6 @@ func NewImageController(imageService services.ImageService) *ImageController {
 func (c *ImageController) UploadImage(ctx *gin.Context) {
 	// JWT에서 현재 요청자의 userID, Role 가져오기
 	currentUserID := ctx.GetUint("userID")
-	role := ctx.GetString("role")
 
 	var targetUserID uint
 	// URL 경로 파라미터로 받은 userID가 있으면, 해당 유저의 이미지를 업로드할 수 있는 ADMIN 권한이 있는지 확인
@@ -30,10 +29,6 @@ func (c *ImageController) UploadImage(ctx *gin.Context) {
 		}
 		targetUserID = uint(id)
 
-		if role != "ADMIN" {
-			ctx.JSON(http.StatusForbidden, gin.H{"error": "어드민 권한이 없습니다"})
-			return
-		}
 	} else {
 		targetUserID = currentUserID
 	}
@@ -64,7 +59,7 @@ func (c *ImageController) GetThumbnail(ctx *gin.Context) {
 	imageIDParam := ctx.Param("imageID")
 	imageID, err := strconv.ParseUint(imageIDParam, 10, 32)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "imageID parameter가 잘못됐습니다"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 imageID 파라미터입니다"})
 		return
 	}
 
@@ -75,4 +70,75 @@ func (c *ImageController) GetThumbnail(ctx *gin.Context) {
 	}
 
 	ctx.File(thumbnailPath) // 썸네일 이미지 파일 반환
+}
+
+// GetImages User 이미지 목록 조회
+func (c *ImageController) GetImages(ctx *gin.Context) {
+	images, err := c.imageService.GetImagesByUserID(ctx.GetUint("userID"))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, images)
+}
+
+// GetImageByID User 특정 이미지 조회
+func (c *ImageController) GetImageByID(ctx *gin.Context) {
+	imageIDParam := ctx.Param("imageID")
+	imageID, err := strconv.ParseUint(imageIDParam, 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 imageID 파라미터입니다"})
+		return
+	}
+
+	image, err := c.imageService.GetImageByID(uint(imageID))
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, image)
+}
+
+// GetAdminImages Admin 이미지 목록 조회
+func (c *ImageController) GetAdminImages(ctx *gin.Context) {
+	// user_id 파라미터가 있으면 해당 유저의 이미지 목록을 조회
+	if userIDParam := ctx.Param("userID"); userIDParam != "" {
+		id, err := strconv.ParseUint(userIDParam, 10, 32)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 userID 파라미터입니다"})
+			return
+		}
+		images, err := c.imageService.GetImagesByUserID(uint(id))
+
+		if err != nil {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, images)
+	} else {
+		// user_id 파라미터가 없으면 모든 유저의 이미지 목록을 조회
+		images, err := c.imageService.GetImages()
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, images)
+	}
+}
+
+// GetAdminImageByID Admin 특정 이미지 조회
+func (c *ImageController) GetAdminImageByID(ctx *gin.Context) {
+	imageIDParam := ctx.Param("imageID")
+	imageID, err := strconv.ParseUint(imageIDParam, 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 imageID 파라미터입니다"})
+		return
+	}
+
+	image, err := c.imageService.GetImageByID(uint(imageID))
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, image)
 }
