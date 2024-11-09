@@ -58,3 +58,21 @@ func (c *ImageController) UploadImage(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{"message": "이미지 업로드가 성공했습니다", "image": image})
 }
+
+// GetThumbnail - 이미지 ID를 받아 썸네일 이미지 파일을 반환
+func (c *ImageController) GetThumbnail(ctx *gin.Context) {
+	imageIDParam := ctx.Param("imageID")
+	imageID, err := strconv.ParseUint(imageIDParam, 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "imageID parameter가 잘못됐습니다"})
+		return
+	}
+
+	thumbnailPath, err := c.imageService.GetThumbnail(uint(imageID))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.File(thumbnailPath) // 썸네일 이미지 파일 반환
+}
