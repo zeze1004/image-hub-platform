@@ -142,3 +142,37 @@ func (c *ImageController) GetAdminImageByID(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, image)
 }
+
+// DeleteImage 개별 이미지 삭제
+func (c *ImageController) DeleteImage(ctx *gin.Context) {
+	imageID, _ := strconv.ParseUint(ctx.Param("imageID"), 10, 32)
+	if err := c.imageService.DeleteImage(uint(imageID)); err != nil {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"message": "이미지 삭제가 성공했습니다"})
+}
+
+// DeleteAllUserImages 유저의 모든 이미지 삭제
+func (c *ImageController) DeleteAllUserImages(ctx *gin.Context) {
+	role := ctx.GetString("role")
+	isAdmin := (role == "ADMIN")
+
+	var userID uint
+	if isAdmin { // 관리자 권한이면 userID 파라미터를 받아서 삭제
+		id, err := strconv.ParseUint(ctx.Param("userID"), 10, 32)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 userID 파라미터입니다"})
+			return
+		}
+		userID = uint(id)
+	} else {
+		userID = ctx.GetUint("userID")
+	}
+
+	if err := c.imageService.DeleteAllImagesByUser(userID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"message": "모든 이미지 삭제가 성공했습니다"})
+}

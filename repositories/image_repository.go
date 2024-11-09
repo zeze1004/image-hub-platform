@@ -10,6 +10,8 @@ type ImageRepository interface {
 	GetImageByID(id uint) (*models.Image, error)
 	GetImagesByUserID(userID uint) ([]models.Image, error)
 	GetAllImages() ([]models.Image, error)
+	DeleteImage(imageID uint) error
+	DeleteImagesByUserID(userID uint) error
 }
 
 type imageRepository struct {
@@ -43,4 +45,14 @@ func (r *imageRepository) GetAllImages() ([]models.Image, error) {
 	var images []models.Image
 	err := r.db.Find(&images).Error
 	return images, err
+}
+
+// DeleteImage - 특정 이미지 삭제
+func (r *imageRepository) DeleteImage(imageID uint) error {
+	return r.db.Delete(&models.Image{}, imageID).Error
+}
+
+// DeleteImagesByUserID - 특정 사용자에 속하는 모든 이미지 일괄 삭제
+func (r *imageRepository) DeleteImagesByUserID(userID uint) error {
+	return r.db.Where("user_id = ?", userID).Delete(&models.Image{}).Error
 }

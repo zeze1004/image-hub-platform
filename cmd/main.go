@@ -31,6 +31,9 @@ func main() {
 		userAPI.GET("/thumbnail/:imageID/", imageController.GetThumbnail) // 썸네일 조회 엔드포인트
 		userAPI.GET("/images", imageController.GetImages)
 		userAPI.GET("/images/:imageID/", imageController.GetImageByID)
+		// 이미지 삭제
+		userAPI.DELETE("/images", imageController.DeleteAllUserImages)
+		userAPI.DELETE("/images/:imageID", imageController.DeleteImage)
 	}
 
 	// 관리자용 엔드포인트
@@ -39,8 +42,11 @@ func main() {
 	{
 		adminAPI.POST("/upload/:userID/", imageController.UploadImage)
 		adminAPI.GET("/images", imageController.GetAdminImages)
-		adminAPI.GET("user/:userID/images", imageController.GetAdminImages)
-		adminAPI.GET("/image/:imageID/", imageController.GetAdminImageByID)
+		adminAPI.GET("users/:userID/images", imageController.GetAdminImages)
+		adminAPI.GET("/images/:imageID/", imageController.GetAdminImageByID)
+		// 이미지 삭제
+		adminAPI.DELETE("/users/:userID/images", imageController.DeleteAllUserImages)
+		adminAPI.DELETE("/images/:imageID/", imageController.DeleteImage)
 	}
 
 	_ = r.Run()
