@@ -11,6 +11,7 @@ import (
 	_ "image/png"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,8 @@ type ImageService interface {
 	GetImages() ([]models.Image, error)
 	GetImagesByUserID(userID uint) ([]models.Image, error)
 	GetImageByID(imageID uint) (*models.Image, error)
+	DeleteImage(imageID uint) error
+	DeleteAllImagesByUser(userID uint) error
 }
 
 type imageService struct {
@@ -168,4 +171,74 @@ func (s *imageService) GetImageByID(imageID uint) (*models.Image, error) {
 		return nil, fmt.Errorf("이미지를 가져오는데 실패했습니다: %v", err)
 	}
 	return image, nil
+}
+
+// DeleteImage - 개별 이미지 삭제
+func (s *imageService) DeleteImage(imageID uint) error {
+	_, err := s.imageRepo.GetImageByID(imageID)
+	if err != nil {
+		return fmt.Errorf("이미지를 찾을 수 없습니다: %v", err)
+	}
+
+	return s.imageRepo.DeleteImage(imageID)
+}
+
+// DeleteAllImagesByUser - 특정 사용자 모든 이미지 삭제
+func (s *imageService) DeleteAllImagesByUser(userID uint) error {
+	images, err := s.imageRepo.GetImagesByUserID(userID)
+	if err != nil {
+		return err
+	}
+
+	// 데이터베이스에서 이미지 데이터 일괄 삭제
+	if err := s.imageRepo.DeleteImagesByUserID(userID); err != nil {
+		return fmt.Errorf("DB에서 이미지 삭제가 실패했습니다: %v", err)
+	}
+
+	// 파일 시스템에서 이미지 파일 및 썸네일 병렬 삭제
+	errChan := make(chan error, len(images)) // 고루틴 에러를 수집할 채널
+	var wg sync.WaitGroup
+
+	for _, image := range images {
+		wg.Add(1)
+		go func(img models.Image) {
+			defer wg.Done()
+			if err := s.deleteImageFiles(&img); err != nil {
+				errChan <- err // 에러 발생 시 채널에 전송
+			}
+		}(image)
+	}
+
+	// 모든 고루틴이 종료되면 채널 닫기
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	// 첫 번째 에러 반환
+	if err := <-errChan; err != nil {
+		return err
+	}
+	return nil
+}
+
+// deleteImageFiles - 파일 시스템에서 이미지 및 썸네일 파일 삭제
+func (s *imageService) deleteImageFiles(image *models.Image) error {
+	var deleteErrors []error
+
+	// 이미지 파일 삭제
+	if err := os.Remove(image.FilePath); err != nil && !os.IsNotExist(err) {
+		deleteErrors = append(deleteErrors, fmt.Errorf("서버에서 이미지 삭제를 실패했습니다: %v", err))
+	}
+
+	// 썸네일 파일 삭제
+	if err := os.Remove(image.ThumbnailPath); err != nil && !os.IsNotExist(err) {
+		deleteErrors = append(deleteErrors, fmt.Errorf("서버에서 썸네일 삭제를 실패했습니다: %v", err))
+	}
+
+	// 에러가 있으면 첫 번째 에러 반환
+	if len(deleteErrors) > 0 {
+		return deleteErrors[0]
+	}
+	return nil
 }
