@@ -233,3 +233,51 @@ func (c *ImageController) GetImagesByCategoryID(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, images)
 	}
 }
+
+// 이미지에 카테고리 추가
+func (c *ImageController) AddCategoryToImage(ctx *gin.Context) {
+	userID := ctx.GetUint("userID")
+	role := ctx.GetString("role")
+
+	imageID, _ := strconv.ParseUint(ctx.Param("imageID"), 10, 32)
+	categoryID, _ := strconv.ParseUint(ctx.Param("categoryID"), 10, 32)
+
+	if role == "USER" {
+		if err := c.imageService.AddCategoryToImageByUser(uint(imageID), uint(categoryID), userID); err != nil {
+			ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+
+		ctx.JSON(http.StatusOK, gin.H{"message": "이미지에 카테고리가 추가됐습니다"})
+	} else {
+		if err := c.imageService.AddCategoryToImageByAdmin(uint(imageID), uint(categoryID)); err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		ctx.JSON(http.StatusOK, gin.H{"message": "이미지에 카테고리가 추가됐습니다"})
+	}
+}
+
+// 이미지에서 카테고리 삭제
+func (c *ImageController) RemoveCategoryFromImage(ctx *gin.Context) {
+	userID := ctx.GetUint("userID")
+	role := ctx.GetString("role")
+
+	imageID, _ := strconv.ParseUint(ctx.Param("imageID"), 10, 32)
+	categoryID, _ := strconv.ParseUint(ctx.Param("categoryID"), 10, 32)
+
+	if role == "USER" {
+		if err := c.imageService.RemoveCategoryFromImageByUser(uint(imageID), uint(categoryID), userID); err != nil {
+			ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"message": "이미지에서 카테고리를 삭제했습니다"})
+	} else {
+		if err := c.imageService.RemoveCategoryFromImageByAdmin(uint(imageID), uint(categoryID)); err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"message": "이미지에서 카테고리를 삭제했습니다"})
+	}
+}
