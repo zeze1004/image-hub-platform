@@ -47,10 +47,10 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		return
 	}
 
-	_, err := c.authService.Login(loginReq.Email, loginReq.Password)
+	token, err := c.authService.Login(loginReq.Email, loginReq.Password)
 	if err != nil {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "인증 실패했습니다"})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{})
+	ctx.JSON(http.StatusOK, gin.H{"token": token})
 }
