@@ -28,7 +28,8 @@ func main() {
 	{
 		// 이미지 업로드 API
 		api.POST("/upload", imageController.UploadImage)
-		api.POST("/upload/:userID", imageController.UploadImage) // ADMIN 계정이 USER의 이미지 업로드
+		api.POST("/upload/:userID/", imageController.UploadImage)     // ADMIN 계정이 USER의 이미지 업로드
+		api.GET("/thumbnail/:imageID/", imageController.GetThumbnail) // 썸네일 조회 엔드포인트
 	}
 
 	_ = r.Run()
