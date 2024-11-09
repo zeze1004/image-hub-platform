@@ -9,11 +9,11 @@ func main() {
 	// DB 초기화
 	db := initializers.InitDB()
 
-	// 사용자 모듈 초기화
+	// 모듈 초기화
 	authController := initializers.InitUserModule(db)
+	imageController := initializers.InitImageModule(db)
 
-	// TODO: 이미지와 카테고리 모듈 및 Auth 미들웨어 초기화
-	//authMiddleware := initializers.InitAuthMiddleware()
+	authMiddleware := initializers.InitAuthMiddleware()
 
 	r := gin.Default()
 
@@ -23,11 +23,13 @@ func main() {
 		auth.POST("/login", authController.Login)
 	}
 
-	//api := r.Group("/api")
-	//api.Use(authMiddleware)
-	//{
-	//	// 이미지와 카테고리 관련 엔드포인트들 추가
-	//}
+	api := r.Group("/api")
+	api.Use(authMiddleware)
+	{
+		// 이미지 업로드 API
+		api.POST("/upload", imageController.UploadImage)
+		api.POST("/upload/:userID", imageController.UploadImage) // ADMIN 계정이 USER의 이미지 업로드
+	}
 
 	_ = r.Run()
 }
