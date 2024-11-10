@@ -9,7 +9,7 @@ type CategoryRepository interface {
 	GetCategoriesByName(names []string) ([]models.Category, error)
 	GetCategoriesByImageID(imageID uint) ([]models.Category, error)
 	GetImagesByCategoryID(categoryID uint) ([]models.Image, error)
-	GetUserImagesByCategoryID(categoryID, userID uint) ([]models.Image, error)
+	GetImagesByCategoryIDAndUserID(categoryID, userID uint) ([]models.Image, error)
 }
 
 type categoryRepository struct {
@@ -28,7 +28,7 @@ func (r *categoryRepository) GetCategoriesByName(names []string) ([]models.Categ
 	return categories, nil
 }
 
-// GetCategoriesByImageID - 특정 이미지에 속한 카테고리 조회
+// GetCategoriesByImageID 특정 이미지에 속한 카테고리 조회
 func (r *categoryRepository) GetCategoriesByImageID(imageID uint) ([]models.Category, error) {
 	var categories []models.Category
 	err := r.db.
@@ -40,7 +40,7 @@ func (r *categoryRepository) GetCategoriesByImageID(imageID uint) ([]models.Cate
 	return categories, err
 }
 
-// GetImagesByCategoryID - 특정 카테고리에 속한 이미지 조회
+// GetImagesByCategoryID 특정 카테고리에 속한 이미지 조회
 func (r *categoryRepository) GetImagesByCategoryID(categoryID uint) ([]models.Image, error) {
 	var images []models.Image
 	err := r.db.
@@ -52,8 +52,8 @@ func (r *categoryRepository) GetImagesByCategoryID(categoryID uint) ([]models.Im
 	return images, err
 }
 
-// GetUserImagesByCategoryID - 특정 카테고리에 속한 사용자의 이미지 조회
-func (r *categoryRepository) GetUserImagesByCategoryID(categoryID, userID uint) ([]models.Image, error) {
+// GetImagesByCategoryIDAndUserID 특정 카테고리에 속한 사용자의 이미지 조회
+func (r *categoryRepository) GetImagesByCategoryIDAndUserID(categoryID, userID uint) ([]models.Image, error) {
 	var images []models.Image
 	err := r.db.
 		Table("images").
