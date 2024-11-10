@@ -1,11 +1,15 @@
 package initializers
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/zeze1004/image-hub-platform/middlewares"
+	"github.com/zeze1004/image-hub-platform/controllers"
+	"github.com/zeze1004/image-hub-platform/repositories"
+	"github.com/zeze1004/image-hub-platform/services"
+	"gorm.io/gorm"
 )
 
-// InitAuthMiddleware Auth 미들웨어 초기화
-func InitAuthMiddleware() gin.HandlerFunc {
-	return middlewares.JWTAuthMiddleware()
+func InitUserModule(db *gorm.DB) *controllers.AuthController {
+	userRepo := repositories.NewUserRepository(db)
+	authService := services.NewAuthService(userRepo)
+	authController := controllers.NewAuthController(authService)
+	return authController
 }

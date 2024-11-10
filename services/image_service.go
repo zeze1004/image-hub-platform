@@ -6,6 +6,7 @@ import (
 	"github.com/nfnt/resize"
 	"github.com/zeze1004/image-hub-platform/models"
 	"github.com/zeze1004/image-hub-platform/repositories"
+	"github.com/zeze1004/image-hub-platform/utils"
 	"image"
 	"image/jpeg"
 	_ "image/png"
@@ -14,20 +15,6 @@ import (
 	"sync"
 	"time"
 )
-
-type ImageService interface {
-	UploadImage(ctx *gin.Context, fileName, description string, userID uint, categoryNames []string) (*models.Image, error)
-	GetThumbnail(imageID uint) (string, error)
-	GetAllImages() ([]models.Image, error)
-	GetImagesByUserID(userID uint) ([]models.Image, error)
-	GetImageByID(imageID uint, userID uint, isAdmin bool) (*models.Image, error)
-	DeleteImageByID(imageID uint, userID uint, isAdmin bool) error
-	DeleteAllImagesByUserID(userID uint) error
-	GetImagesByCategoryIDAndUserID(categoryID, userID uint, isAdmin bool) ([]models.Image, error)  // (유저) 특정 카테고리를 갖는 사용자의 이미지 조회
-	GetCategoriesByImageIDAndUserID(imageID, userID uint, isAdmin bool) ([]models.Category, error) // (유저) 특정 이미지의 카테고리 조회
-	AddCategoryToImageByImageIDAndCategoryID(imageID, categoryID, userID uint, isAdmin bool) error
-	RemoveCategoryFromImageByImageIDAndCategoryID(imageID, categoryID, userID uint, isAdmin bool) error
-}
 
 type imageService struct {
 	imageRepo         repositories.ImageRepository
@@ -179,6 +166,15 @@ func (s *imageService) GetImageByID(imageID uint, userID uint, isAdmin bool) (*m
 	return s.imageRepo.GetImageByID(imageID)
 }
 
+// GetImagesByCategoryIDAndUserID 특정 카테고리를 가진 사용자의 이미지 조회
+func (s *imageService) GetImagesByCategoryIDAndUserID(categoryID, userID uint, isAdmin bool) ([]models.Image, error) {
+	if !isAdmin {
+		return s.categoryRepo.GetImagesByCategoryIDAndUserID(categoryID, userID)
+	} else {
+		return s.categoryRepo.GetImagesByCategoryID(categoryID)
+	}
+}
+
 // DeleteImageByID imageID로 개별 이미지 삭제
 func (s *imageService) DeleteImageByID(imageID uint, userID uint, isAdmin bool) error {
 	if !isAdmin {
@@ -250,99 +246,6 @@ func (s *imageService) deleteImageFiles(image *models.Image) error {
 	return nil
 }
 
-// GetImagesByCategoryIDAndUserID 특정 카테고리를 가진 사용자의 이미지 조회
-func (s *imageService) GetImagesByCategoryIDAndUserID(categoryID, userID uint, isAdmin bool) ([]models.Image, error) {
-	if !isAdmin {
-		return s.categoryRepo.GetImagesByCategoryIDAndUserID(categoryID, userID)
-	} else {
-		return s.categoryRepo.GetImagesByCategoryID(categoryID)
-	}
-}
-
-// GetCategoriesByImageIDAndUserID 특정 이미지의 카테고리 조회
-func (s *imageService) GetCategoriesByImageIDAndUserID(imageID, userID uint, isAdmin bool) ([]models.Category, error) {
-	if !isAdmin {
-		if err := s.validateImageOwnership(imageID, userID); err != nil {
-			return nil, err
-		}
-	}
-
-	return s.categoryRepo.GetCategoriesByImageID(imageID)
-}
-
-// AddCategoryToImageByImageIDAndCategoryID 이미지에 카테고리 추가
-func (s *imageService) AddCategoryToImageByImageIDAndCategoryID(imageID, categoryID, userID uint, isAdmin bool) error {
-	if !isAdmin {
-		if err := s.validateImageOwnership(imageID, userID); err != nil {
-			return err
-		}
-	}
-
-	err := s.isValidCategoryID(categoryID)
-	if err != nil {
-		return err
-	}
-
-	// 추가할 카테고리가 이미 이미지에 있는지 검증
-	err = s.isDuplicateCategory(imageID, categoryID)
-	if err != nil {
-		return err
-	}
-
-	return s.imageCategoryRepo.AddCategoryToImage(imageID, categoryID)
-}
-
-// RemoveCategoryFromImageByImageIDAndCategoryID 이미지에서 카테고리 제거
-func (s *imageService) RemoveCategoryFromImageByImageIDAndCategoryID(imageID, categoryID, userID uint, isAdmin bool) error {
-	if !isAdmin {
-		if err := s.validateImageOwnership(imageID, userID); err != nil {
-			return err
-		}
-	}
-
-	err := s.isValidCategoryID(categoryID)
-	if err != nil {
-		return err
-	}
-
-	err = s.isDuplicateCategory(imageID, categoryID)
-	// 중복 카테고리가 없으면 에러가 반환되지 않으므로 삭제할 카테고리가 없다는 에러 반환
-	if err == nil {
-		return fmt.Errorf("이미지에 카테고리가 없어서 삭제할 수 없습니다") // TODO: 500 에러 리턴되는 로직 수정
-	}
-
-	return s.imageCategoryRepo.RemoveCategoryFromImage(imageID, categoryID)
-}
-
-func (s *imageService) isDuplicateCategory(imageID uint, categoryID uint) error {
-	// 카테고리 중복 검증
-	categories, err := s.imageCategoryRepo.GetCategoriesByImageID(imageID)
-	if err != nil {
-		return err
-	}
-	for _, category := range categories {
-		if category.ID == categoryID {
-			return fmt.Errorf("이미지에 이미 등록된 카테고리입니다")
-		}
-	}
-	return nil
-}
-
-func (s *imageService) isValidCategoryID(categoryID uint) error {
-	if categoryID > 5 || categoryID < 1 {
-		return fmt.Errorf("잘못된 카테고리 ID입니다")
-	}
-	return nil
-}
-
-// validateImageOwnership 이미지 소유권 검증
 func (s *imageService) validateImageOwnership(imageID, userID uint) error {
-	image, err := s.imageRepo.GetImageByID(imageID)
-	if err != nil {
-		return fmt.Errorf("이미지를 찾을 수 없습니다: %v", err)
-	}
-	if image.UserID != userID {
-		return fmt.Errorf("이미지에 대한 권한이 없습니다")
-	}
-	return nil
+	return utils.ValidateImageOwnership(s.imageRepo, imageID, userID)
 }

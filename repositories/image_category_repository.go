@@ -5,13 +5,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type ImageCategoryRepository interface {
-	AddImageCategory(imageID uint, categoryID uint) error
-	GetCategoriesByImageID(imageID uint) ([]models.Category, error)
-	AddCategoryToImage(imageID, categoryID uint) error
-	RemoveCategoryFromImage(imageID, categoryID uint) error
-}
-
 type imageCategoryRepository struct {
 	db *gorm.DB
 }
@@ -20,7 +13,7 @@ func NewImageCategoryRepository(db *gorm.DB) ImageCategoryRepository {
 	return &imageCategoryRepository{db: db}
 }
 
-// AddImageCategory - 이미지와 카테고리 관계 추가
+// AddImageCategory 이미지에 카테고리 추가
 func (r *imageCategoryRepository) AddImageCategory(imageID uint, categoryID uint) error {
 	imageCategory := models.ImageCategory{
 		ImageID:    imageID,
@@ -29,7 +22,7 @@ func (r *imageCategoryRepository) AddImageCategory(imageID uint, categoryID uint
 	return r.db.Create(&imageCategory).Error
 }
 
-// GetCategoriesByImageID - 특정 이미지에 연결된 모든 카테고리 조회
+// GetCategoriesByImageID 특정 이미지에 연결된 모든 카테고리 조회
 func (r *imageCategoryRepository) GetCategoriesByImageID(imageID uint) ([]models.Category, error) {
 	var categories []models.Category
 	err := r.db.Table("categories").
@@ -40,7 +33,7 @@ func (r *imageCategoryRepository) GetCategoriesByImageID(imageID uint) ([]models
 	return categories, err
 }
 
-// AddCategoryToImage - 이미지에 카테고리 추가
+// AddCategoryToImage 이미지에 카테고리 추가
 func (r *imageCategoryRepository) AddCategoryToImage(imageID, categoryID uint) error {
 	return r.db.Exec(
 		"INSERT INTO image_categories (image_id, category_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE image_id=image_id",
@@ -48,7 +41,7 @@ func (r *imageCategoryRepository) AddCategoryToImage(imageID, categoryID uint) e
 	).Error
 }
 
-// RemoveCategoryFromImage - 이미지에서 카테고리 제거
+// RemoveCategoryFromImage 이미지에서 카테고리 제거
 func (r *imageCategoryRepository) RemoveCategoryFromImage(imageID, categoryID uint) error {
 	return r.db.Where("image_id = ? AND category_id = ?", imageID, categoryID).
 		Delete(&models.ImageCategory{}).Error

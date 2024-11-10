@@ -13,6 +13,7 @@ func main() {
 	// 모듈 초기화
 	authController := initializers.InitUserModule(db)
 	imageController := initializers.InitImageModule(db)
+	categoryController := initializers.InitCategoryModule(db)
 
 	r := gin.Default()
 
@@ -22,45 +23,53 @@ func main() {
 		auth.POST("/login", authController.Login)
 	}
 
-	api := r.Group("/api", middlewares.JWTAuthMiddleware())
-	// 사용자용 엔드포인트
-	userAPI := api.Group("/user")
-	userAPI.Use(middlewares.RequireUserRole()) // 사용자 권한 미들웨어
+	api := r.Group("/api", middlewares.JWTAuthMiddleware()) // JWT 인증 미들웨어를 타는 API 그룹
+
+	userAPI := api.Group("/user")              // user용 엔드포인트
+	userAPI.Use(middlewares.RequireUserRole()) // user 권한 검증 미들웨어
 	{
-		userAPI.POST("/upload", imageController.UploadImage)
-		userAPI.GET("/thumbnail/:imageID/", imageController.GetThumbnail) // 썸네일 조회 엔드포인트
-		userAPI.GET("/images", imageController.GetImagesByUserID)
-		userAPI.GET("/images/:imageID/", imageController.GetImageByID)
-		// 이미지 삭제
-		userAPI.DELETE("/images", imageController.DeleteAllUserImages)
-		userAPI.DELETE("/images/:imageID", imageController.DeleteImage)
-		userAPI.GET("/images/:imageID/categories", imageController.GetCategoriesByImageID) // 카테고리별 이미지 조회
+		// 이미지 API
+		imageAPI := userAPI.Group("/images")
+		imageAPI.POST("", imageController.UploadImage)
+
+		imageAPI.GET("", imageController.GetImagesByUserID)
+		imageAPI.GET("/thumbnail/:imageID/", imageController.GetThumbnail)              // 썸네일 조회 엔드포인트
+		imageAPI.GET("/:imageID/categories", categoryController.GetCategoriesByImageID) // 카테고리별 이미지 조회
+		imageAPI.GET("/:imageID/", imageController.GetImageByID)
+
+		imageAPI.DELETE("", imageController.DeleteAllUserImages)
+		imageAPI.DELETE("/:imageID", imageController.DeleteImage)
 
 		// 카테고리 API
 		categoryAPI := userAPI.Group("/categories")
+
 		categoryAPI.GET("/:categoryID/images", imageController.GetImagesByCategoryID)
-		categoryAPI.POST("/:categoryID/images/:imageID/", imageController.AddCategoryToImage)
-		categoryAPI.DELETE("/:categoryID/images/:imageID/", imageController.RemoveCategoryFromImage)
+		categoryAPI.POST("/:categoryID/images/:imageID/", categoryController.AddCategoryToImage)
+		categoryAPI.DELETE("/:categoryID/images/:imageID/", categoryController.RemoveCategoryFromImage)
 	}
 
-	// 관리자용 엔드포인트
-	adminAPI := api.Group("/admin")
-	adminAPI.Use(middlewares.RequireAdminRole()) // 관리자 권한 미들웨어
+	adminAPI := api.Group("/admin")              // admin용 엔드포인트
+	adminAPI.Use(middlewares.RequireAdminRole()) // admin 권한 검증 미들웨어
 	{
-		adminAPI.POST("/upload/:userID/", imageController.UploadImage)
-		adminAPI.GET("/images", imageController.GetAllImagesByAdmin)
-		adminAPI.GET("users/:userID/images", imageController.GetImagesByUserID)
-		adminAPI.GET("/images/:imageID/", imageController.GetImageByID)
-		// 이미지 삭제
-		adminAPI.DELETE("/users/:userID/images", imageController.DeleteAllUserImages)
-		adminAPI.DELETE("/images/:imageID/", imageController.DeleteImage)
-		adminAPI.GET("/images/:imageID/categories", imageController.GetCategoriesByImageID) // 카테고리별 이미지 조회
+		// 이미지 API
+		imageAPI := adminAPI.Group("/images")
+
+		imageAPI.POST(":userID/", imageController.UploadImage)
+
+		imageAPI.GET("", imageController.GetAllImagesByAdmin)
+		imageAPI.GET("users/:userID/images", imageController.GetImagesByUserID)
+		imageAPI.GET("/:imageID/", imageController.GetImageByID)
+
+		imageAPI.DELETE("/users/:userID/images", imageController.DeleteAllUserImages)
+		imageAPI.DELETE("/:imageID/", imageController.DeleteImage)
+		imageAPI.GET("/:imageID/categories", categoryController.GetCategoriesByImageID) // 카테고리별 이미지 조회
 
 		// 카테고리 API
 		categoryAPI := adminAPI.Group("/categories")
+
 		categoryAPI.GET("/:categoryID/images", imageController.GetImagesByCategoryID)
-		categoryAPI.POST("/:categoryID/images/:imageID/", imageController.AddCategoryToImage)
-		categoryAPI.DELETE("/:categoryID/images/:imageID/", imageController.RemoveCategoryFromImage)
+		categoryAPI.POST("/:categoryID/images/:imageID/", categoryController.AddCategoryToImage)
+		categoryAPI.DELETE("/:categoryID/images/:imageID/", categoryController.RemoveCategoryFromImage)
 	}
 
 	_ = r.Run()
