@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -155,4 +156,96 @@ func TestUploadImageFailure(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, uploadedImage)
 	assert.Contains(t, err.Error(), "이미지 생성에 실패했습니다")
+}
+
+// 모든 이미지 파일 삭제를 병렬로 처리할 떄와 순차 삭제 성능 비교
+func BenchmarkDeleteAllImages(b *testing.B) {
+	ctrl := gomock.NewController(b)
+	defer ctrl.Finish()
+
+	mockImageRepo := mocks.NewMockImageRepository(ctrl)
+	mockCategoryRepo := mocks.NewMockCategoryRepository(ctrl)
+	mockImageCategoryRepo := mocks.NewMockImageCategoryRepository(ctrl)
+
+	imageService := services.NewImageService(mockImageRepo, mockCategoryRepo, mockImageCategoryRepo)
+
+	gin.SetMode(gin.TestMode)
+
+	userID := uint(1)
+	numFiles := 1000
+	images := make([]models.Image, numFiles)
+	// 테스트 이미지 파일 이름 생성
+	for i := range images {
+		images[i] = models.Image{
+			ID:            userID,
+			FilePath:      "./uploads/" + strconv.Itoa(i+1) + ".jpg",
+			ThumbnailPath: "./uploads/thumb_" + strconv.Itoa(i+1) + ".jpg",
+		}
+	}
+
+	// 필요 의존성 메소드 MOCK 처리
+	mockImageRepo.EXPECT().GetImagesByUserID(userID).Return(images, nil).AnyTimes()
+	mockImageRepo.EXPECT().DeleteImagesByUserID(userID).Return(nil).AnyTimes()
+
+	for _, bm := range []struct {
+		name string
+		fn   func() error
+	}{
+		{
+			name: "ParallelDelete",
+			// 병렬로 모든 이미지 삭제하는 DeleteAllImagesByUserID 호출
+			fn: func() error {
+				return imageService.DeleteAllImagesByUserID(userID)
+			},
+		},
+		{
+			name: "SequentialDelete",
+			// 모든 파일을 순차적으로 삭제하는 반복문 호출
+			fn: func() error {
+				for _, image := range images {
+					if err := os.Remove(image.FilePath); err != nil && !os.IsNotExist(err) {
+						return err
+					}
+					if err := os.Remove(image.ThumbnailPath); err != nil && !os.IsNotExist(err) {
+						return err
+					}
+				}
+				return nil
+			},
+		},
+	} {
+		b.Run(bm.name, func(b *testing.B) {
+			for n := 0; n < b.N; n++ { // 실행 속도 평균을 내기 위해 반복 실행
+				if err := createTestFiles(images); err != nil {
+					b.Fatal(err)
+				}
+				b.StartTimer()
+				if err := bm.fn(); err != nil {
+					b.Fatal(err)
+				}
+				b.StopTimer()
+			}
+		})
+	}
+}
+
+// 테스트 이미지 파일 생성
+func createTestFiles(images []models.Image) error {
+	for _, image := range images {
+		if err := os.MkdirAll(filepath.Dir(image.FilePath), os.ModePerm); err != nil {
+			return err
+		}
+
+		file, err := os.Create(image.FilePath)
+		if err != nil {
+			return err
+		}
+		_, err = file.Write([]byte(image.FileName))
+		if err != nil {
+			file.Close()
+			return err
+		}
+		file.Close()
+	}
+	return nil
 }
