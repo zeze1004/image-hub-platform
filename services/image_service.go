@@ -71,7 +71,7 @@ func (s *imageService) UploadImage(ctx *gin.Context, fileName, description strin
 		UserID:        userID,
 	}
 
-	if err := s.imageRepo.CreateImage(&uploadImage); err != nil {
+	if err := s.imageRepo.CreateImageMetaData(&uploadImage); err != nil {
 		return nil, fmt.Errorf("이미지 메타데이터를 저장하는데 실패했습니다: %v", err)
 	}
 
