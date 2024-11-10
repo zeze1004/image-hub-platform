@@ -18,19 +18,15 @@ import (
 type ImageService interface {
 	UploadImage(ctx *gin.Context, fileName, description string, userID uint, categoryNames []string) (*models.Image, error)
 	GetThumbnail(imageID uint) (string, error)
-	GetImages() ([]models.Image, error)
+	GetAllImages() ([]models.Image, error)
 	GetImagesByUserID(userID uint) ([]models.Image, error)
-	GetImageByID(imageID uint) (*models.Image, error)
-	DeleteImage(imageID uint) error
-	DeleteAllImagesByUser(userID uint) error
-	GetImagesByCategoryIDAndUserID(categoryID, userID uint) ([]models.Image, error)  // (유저) 특정 카테고리를 갖는 사용자의 이미지 조회
-	GetCategoriesByImageIDAndUserID(imageID, userID uint) ([]models.Category, error) // (유저) 특정 이미지의 카테고리 조회
-	GetImagesByCategoryID(categoryID uint) ([]models.Image, error)                   // (어드민) 특정 카테고리를 갖는 모든 이미지 조회
-	GetCategoriesByImageID(imageID uint) ([]models.Category, error)                  // (어드민) 특정 이미지에 속한 카테고리 조회
-	AddCategoryToImageByUser(imageID, categoryID uint, userID uint) error
-	AddCategoryToImageByAdmin(imageID, categoryID uint) error
-	RemoveCategoryFromImageByUser(imageID, categoryID uint, userID uint) error
-	RemoveCategoryFromImageByAdmin(imageID, categoryID uint) error
+	GetImageByID(imageID uint, userID uint, isAdmin bool) (*models.Image, error)
+	DeleteImageByID(imageID uint, userID uint, isAdmin bool) error
+	DeleteAllImagesByUserID(userID uint) error
+	GetImagesByCategoryIDAndUserID(categoryID, userID uint, isAdmin bool) ([]models.Image, error)  // (유저) 특정 카테고리를 갖는 사용자의 이미지 조회
+	GetCategoriesByImageIDAndUserID(imageID, userID uint, isAdmin bool) ([]models.Category, error) // (유저) 특정 이미지의 카테고리 조회
+	AddCategoryToImageByImageIDAndCategoryID(imageID, categoryID, userID uint, isAdmin bool) error
+	RemoveCategoryFromImageByImageIDAndCategoryID(imageID, categoryID, userID uint, isAdmin bool) error
 }
 
 type imageService struct {
@@ -145,7 +141,7 @@ func (s *imageService) createThumbnail(filePath, saveDir, fileName string) (stri
 	return thumbPath, nil
 }
 
-// GetThumbnail - 썸네일 경로 반환
+// GetThumbnail 썸네일 경로 반환
 func (s *imageService) GetThumbnail(imageID uint) (string, error) {
 	uploadedImage, err := s.imageRepo.GetImageByID(imageID)
 	if err != nil {
@@ -154,8 +150,8 @@ func (s *imageService) GetThumbnail(imageID uint) (string, error) {
 	return uploadedImage.ThumbnailPath, nil
 }
 
-// GetImages - 모든 이미지 목록 조회
-func (s *imageService) GetImages() ([]models.Image, error) {
+// GetAllImages 모든 이미지 목록 조회
+func (s *imageService) GetAllImages() ([]models.Image, error) {
 	images, err := s.imageRepo.GetAllImages()
 	if err != nil {
 		return nil, fmt.Errorf("이미지 목록을 가져오는데 실패했습니다: %v", err)
@@ -172,27 +168,30 @@ func (s *imageService) GetImagesByUserID(userID uint) ([]models.Image, error) {
 	return images, nil
 }
 
-// GetImageByID - 특정 이미지 조회
-func (s *imageService) GetImageByID(imageID uint) (*models.Image, error) {
-	image, err := s.imageRepo.GetImageByID(imageID)
-	if err != nil {
-		return nil, fmt.Errorf("이미지를 가져오는데 실패했습니다: %v", err)
+// GetImageByID imageID로 이미지 조회
+func (s *imageService) GetImageByID(imageID uint, userID uint, isAdmin bool) (*models.Image, error) {
+	if !isAdmin {
+		if err := s.validateImageOwnership(imageID, userID); err != nil {
+			return nil, err
+		}
 	}
-	return image, nil
+
+	return s.imageRepo.GetImageByID(imageID)
 }
 
-// DeleteImage - 개별 이미지 삭제
-func (s *imageService) DeleteImage(imageID uint) error {
-	_, err := s.imageRepo.GetImageByID(imageID)
-	if err != nil {
-		return fmt.Errorf("이미지를 찾을 수 없습니다: %v", err)
+// DeleteImageByID imageID로 개별 이미지 삭제
+func (s *imageService) DeleteImageByID(imageID uint, userID uint, isAdmin bool) error {
+	if !isAdmin {
+		if err := s.validateImageOwnership(imageID, userID); err != nil {
+			return err
+		}
 	}
 
 	return s.imageRepo.DeleteImage(imageID)
 }
 
-// DeleteAllImagesByUser - 특정 사용자 모든 이미지 삭제
-func (s *imageService) DeleteAllImagesByUser(userID uint) error {
+// DeleteAllImagesByUserID user의 모든 이미지 삭제
+func (s *imageService) DeleteAllImagesByUserID(userID uint) error {
 	images, err := s.imageRepo.GetImagesByUserID(userID)
 	if err != nil {
 		return err
@@ -230,7 +229,7 @@ func (s *imageService) DeleteAllImagesByUser(userID uint) error {
 	return nil
 }
 
-// deleteImageFiles - 파일 시스템에서 이미지 및 썸네일 파일 삭제
+// deleteImageFiles 파일 시스템에서 이미지 및 썸네일 파일 삭제
 func (s *imageService) deleteImageFiles(image *models.Image) error {
 	var deleteErrors []error
 
@@ -251,52 +250,40 @@ func (s *imageService) deleteImageFiles(image *models.Image) error {
 	return nil
 }
 
-// GetCategoriesByImageID - 특정 이미지의 카테고리 조회
-func (s *imageService) GetCategoriesByImageID(imageID uint) ([]models.Category, error) {
-	return s.categoryRepo.GetCategoriesByImageID(imageID)
-}
-
-// GetImagesByCategoryID - 특정 카테고리를 가진 이미지 조회
-func (s *imageService) GetImagesByCategoryID(categoryID uint) ([]models.Image, error) {
-	return s.categoryRepo.GetImagesByCategoryID(categoryID)
-}
-
-// GetImagesByCategoryIDAndUserID - 특정 카테고리를 가진 사용자의 이미지 조회
-func (s *imageService) GetImagesByCategoryIDAndUserID(categoryID, userID uint) ([]models.Image, error) {
-	return s.categoryRepo.GetUserImagesByCategoryID(categoryID, userID)
-}
-
-// GetCategoriesByImageIDAndUserID - 특정 이미지의 카테고리 조회
-func (s *imageService) GetCategoriesByImageIDAndUserID(imageID, userID uint) ([]models.Category, error) {
-	image, err := s.imageRepo.GetImageByID(imageID)
-	if err != nil {
-		return nil, fmt.Errorf("이미지를 찾을 수 없습니다: %v", err)
+// GetImagesByCategoryIDAndUserID 특정 카테고리를 가진 사용자의 이미지 조회
+func (s *imageService) GetImagesByCategoryIDAndUserID(categoryID, userID uint, isAdmin bool) ([]models.Image, error) {
+	if !isAdmin {
+		return s.categoryRepo.GetImagesByCategoryIDAndUserID(categoryID, userID)
+	} else {
+		return s.categoryRepo.GetImagesByCategoryID(categoryID)
 	}
+}
 
-	if image.UserID != userID {
-		return nil, fmt.Errorf("이미지에 대한 권한이 없습니다")
+// GetCategoriesByImageIDAndUserID 특정 이미지의 카테고리 조회
+func (s *imageService) GetCategoriesByImageIDAndUserID(imageID, userID uint, isAdmin bool) ([]models.Category, error) {
+	if !isAdmin {
+		if err := s.validateImageOwnership(imageID, userID); err != nil {
+			return nil, err
+		}
 	}
 
 	return s.categoryRepo.GetCategoriesByImageID(imageID)
 }
 
-// AddCategoryToImage - 이미지에 카테고리 추가
-func (s *imageService) AddCategoryToImageByUser(imageID, categoryID, userID uint) error {
-	// 사용자 확인
-	image, err := s.imageRepo.GetImageByID(imageID)
-	if err != nil {
-		return fmt.Errorf("이미지를 찾을 수 없습니다")
-	}
-	if image.UserID != userID {
-		return fmt.Errorf("이미지에 대한 권한이 없습니다")
+// AddCategoryToImageByImageIDAndCategoryID 이미지에 카테고리 추가
+func (s *imageService) AddCategoryToImageByImageIDAndCategoryID(imageID, categoryID, userID uint, isAdmin bool) error {
+	if !isAdmin {
+		if err := s.validateImageOwnership(imageID, userID); err != nil {
+			return err
+		}
 	}
 
-	err = s.isValidCategoryID(categoryID)
+	err := s.isValidCategoryID(categoryID)
 	if err != nil {
 		return err
 	}
 
-	// 카테고리 중복 검증
+	// 추가할 카테고리가 이미 이미지에 있는지 검증
 	err = s.isDuplicateCategory(imageID, categoryID)
 	if err != nil {
 		return err
@@ -305,56 +292,23 @@ func (s *imageService) AddCategoryToImageByUser(imageID, categoryID, userID uint
 	return s.imageCategoryRepo.AddCategoryToImage(imageID, categoryID)
 }
 
-// RemoveCategoryFromImage - 이미지에서 카테고리 제거
-func (s *imageService) RemoveCategoryFromImageByUser(imageID, categoryID, userID uint) error {
-	// 사용자 확인
-	image, err := s.imageRepo.GetImageByID(imageID)
-	if err != nil {
-		return fmt.Errorf("이미지를 찾을 수 없습니다")
-	}
-	if image.UserID != userID {
-		return fmt.Errorf("이미지에 대한 권한이 없습니다")
+// RemoveCategoryFromImageByImageIDAndCategoryID 이미지에서 카테고리 제거
+func (s *imageService) RemoveCategoryFromImageByImageIDAndCategoryID(imageID, categoryID, userID uint, isAdmin bool) error {
+	if !isAdmin {
+		if err := s.validateImageOwnership(imageID, userID); err != nil {
+			return err
+		}
 	}
 
-	err = s.isValidCategoryID(categoryID)
+	err := s.isValidCategoryID(categoryID)
 	if err != nil {
 		return err
 	}
 
 	err = s.isDuplicateCategory(imageID, categoryID)
-	if err == nil { // 중복 카테고리가 없으면
+	// 중복 카테고리가 없으면 에러가 반환되지 않으므로 삭제할 카테고리가 없다는 에러 반환
+	if err == nil {
 		return fmt.Errorf("이미지에 카테고리가 없어서 삭제할 수 없습니다") // TODO: 500 에러 리턴되는 로직 수정
-	}
-
-	return s.imageCategoryRepo.RemoveCategoryFromImage(imageID, categoryID)
-}
-
-// AddCategoryToImageByAdmin - 이미지에 카테고리 추가
-func (s *imageService) AddCategoryToImageByAdmin(imageID, categoryID uint) error {
-	// 카테고리 중복 검증
-	err := s.isDuplicateCategory(imageID, categoryID)
-	if err != nil {
-		return err
-	}
-
-	err = s.isValidCategoryID(categoryID)
-	if err != nil {
-		return err
-	}
-
-	return s.imageCategoryRepo.AddCategoryToImage(imageID, categoryID)
-}
-
-// RemoveCategoryFromImageByAdmin - 이미지에서 카테고리 제거
-func (s *imageService) RemoveCategoryFromImageByAdmin(imageID, categoryID uint) error {
-	err := s.isDuplicateCategory(imageID, categoryID)
-	if err == nil { // 중복 카테고리가 없으면
-		return fmt.Errorf("이미지에 카테고리가 없어서 삭제할 수 없습니다")
-	}
-
-	err = s.isValidCategoryID(categoryID)
-	if err != nil {
-		return err
 	}
 
 	return s.imageCategoryRepo.RemoveCategoryFromImage(imageID, categoryID)
@@ -362,7 +316,7 @@ func (s *imageService) RemoveCategoryFromImageByAdmin(imageID, categoryID uint) 
 
 func (s *imageService) isDuplicateCategory(imageID uint, categoryID uint) error {
 	// 카테고리 중복 검증
-	categories, err := s.GetCategoriesByImageID(imageID)
+	categories, err := s.imageCategoryRepo.GetCategoriesByImageID(imageID)
 	if err != nil {
 		return err
 	}
@@ -377,6 +331,18 @@ func (s *imageService) isDuplicateCategory(imageID uint, categoryID uint) error 
 func (s *imageService) isValidCategoryID(categoryID uint) error {
 	if categoryID > 5 || categoryID < 1 {
 		return fmt.Errorf("잘못된 카테고리 ID입니다")
+	}
+	return nil
+}
+
+// validateImageOwnership 이미지 소유권 검증
+func (s *imageService) validateImageOwnership(imageID, userID uint) error {
+	image, err := s.imageRepo.GetImageByID(imageID)
+	if err != nil {
+		return fmt.Errorf("이미지를 찾을 수 없습니다: %v", err)
+	}
+	if image.UserID != userID {
+		return fmt.Errorf("이미지에 대한 권한이 없습니다")
 	}
 	return nil
 }

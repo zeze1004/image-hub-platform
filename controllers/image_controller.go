@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/zeze1004/image-hub-platform/services"
 	"net/http"
@@ -16,36 +17,26 @@ func NewImageController(imageService services.ImageService) *ImageController {
 }
 
 func (c *ImageController) UploadImage(ctx *gin.Context) {
-	// JWT에서 현재 요청자의 userID, Role 가져오기
-	currentUserID := ctx.GetUint("userID")
-
-	var targetUserID uint
-	// URL 경로 파라미터로 받은 userID가 있으면, 해당 유저의 이미지를 업로드할 수 있는 ADMIN 권한이 있는지 확인
-	if userIDParam := ctx.Param("userID"); userIDParam != "" {
-		id, err := strconv.ParseUint(userIDParam, 10, 32)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 userID 파라미터입니다"})
-			return
-		}
-		targetUserID = uint(id)
-
+	var userID uint
+	// ADMIN 권한 요청이라면, URL 경로 파라미터로 받은 userID가 있는지 검증
+	if c.isAdmin(ctx) {
+		userIDParam := ctx.Param("userID")
+		userID, _ = c.parseAndValidateID(userIDParam)
 	} else {
-		targetUserID = currentUserID
+		userID = ctx.GetUint("userID")
 	}
 
-	// 이미지 파일 및 설명 가져오기
+	// 이미지 파일, 설명, 카테고리 가져오기
 	file, err := ctx.FormFile("image")
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "이미지 파일이 누락됐습니다"})
 		return
 	}
 	description := ctx.PostForm("description")
-
-	// 카테고리 이름들 가져오기
 	categoryNames := ctx.PostFormArray("categories")
 
 	// 이미지 업로드
-	image, err := c.imageService.UploadImage(ctx, file.Filename, description, targetUserID, categoryNames)
+	image, err := c.imageService.UploadImage(ctx, file.Filename, description, userID, categoryNames)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -57,13 +48,9 @@ func (c *ImageController) UploadImage(ctx *gin.Context) {
 // GetThumbnail - 이미지 ID를 받아 썸네일 이미지 파일을 반환
 func (c *ImageController) GetThumbnail(ctx *gin.Context) {
 	imageIDParam := ctx.Param("imageID")
-	imageID, err := strconv.ParseUint(imageIDParam, 10, 32)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 imageID 파라미터입니다"})
-		return
-	}
+	imageID, _ := c.parseAndValidateID(imageIDParam)
 
-	thumbnailPath, err := c.imageService.GetThumbnail(uint(imageID))
+	thumbnailPath, err := c.imageService.GetThumbnail(imageID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -72,81 +59,49 @@ func (c *ImageController) GetThumbnail(ctx *gin.Context) {
 	ctx.File(thumbnailPath) // 썸네일 이미지 파일 반환
 }
 
-// GetImages User 이미지 목록 조회
-func (c *ImageController) GetImages(ctx *gin.Context) {
-	images, err := c.imageService.GetImagesByUserID(ctx.GetUint("userID"))
+// GetImagesByUserID User가 가진 모든 이미지 목록 조회
+func (c *ImageController) GetImagesByUserID(ctx *gin.Context) {
+	var userID uint
+	if c.isAdmin(ctx) {
+		userIDParam := ctx.Param("userID")
+		userID, _ = c.parseAndValidateID(userIDParam)
+	} else {
+		userID = ctx.GetUint("userID")
+	}
+	images, _ := c.imageService.GetImagesByUserID(userID)
+	ctx.JSON(http.StatusOK, images)
+}
+
+// GetImageByID imageID로 특정 이미지 조회
+func (c *ImageController) GetImageByID(ctx *gin.Context) {
+	imageIDParam := ctx.Param("imageID")
+	imageID, _ := c.parseAndValidateID(imageIDParam)
+
+	image, err := c.imageService.GetImageByID(imageID, ctx.GetUint("userID"), c.isAdmin(ctx))
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, image)
+}
+
+// GetAllImagesByAdmin 모든 이미지 목록 조회
+func (c *ImageController) GetAllImagesByAdmin(ctx *gin.Context) {
+	images, err := c.imageService.GetAllImages()
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, images)
-}
 
-// GetImageByID User 특정 이미지 조회
-func (c *ImageController) GetImageByID(ctx *gin.Context) {
-	imageIDParam := ctx.Param("imageID")
-	imageID, err := strconv.ParseUint(imageIDParam, 10, 32)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 imageID 파라미터입니다"})
-		return
-	}
-
-	image, err := c.imageService.GetImageByID(uint(imageID))
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-	ctx.JSON(http.StatusOK, image)
-}
-
-// GetAdminImages Admin 이미지 목록 조회
-func (c *ImageController) GetAdminImages(ctx *gin.Context) {
-	// user_id 파라미터가 있으면 해당 유저의 이미지 목록을 조회
-	if userIDParam := ctx.Param("userID"); userIDParam != "" {
-		id, err := strconv.ParseUint(userIDParam, 10, 32)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 userID 파라미터입니다"})
-			return
-		}
-		images, err := c.imageService.GetImagesByUserID(uint(id))
-
-		if err != nil {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusOK, images)
-	} else {
-		// user_id 파라미터가 없으면 모든 유저의 이미지 목록을 조회
-		images, err := c.imageService.GetImages()
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusOK, images)
-	}
-}
-
-// GetAdminImageByID Admin 특정 이미지 조회
-func (c *ImageController) GetAdminImageByID(ctx *gin.Context) {
-	imageIDParam := ctx.Param("imageID")
-	imageID, err := strconv.ParseUint(imageIDParam, 10, 32)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 imageID 파라미터입니다"})
-		return
-	}
-
-	image, err := c.imageService.GetImageByID(uint(imageID))
-	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-	ctx.JSON(http.StatusOK, image)
 }
 
 // DeleteImage 개별 이미지 삭제
 func (c *ImageController) DeleteImage(ctx *gin.Context) {
-	imageID, _ := strconv.ParseUint(ctx.Param("imageID"), 10, 32)
-	if err := c.imageService.DeleteImage(uint(imageID)); err != nil {
+	imageIDParam := ctx.Param("imageID")
+	imageID, _ := c.parseAndValidateID(imageIDParam)
+
+	if err := c.imageService.DeleteImageByID(imageID, ctx.GetUint("userID"), c.isAdmin(ctx)); err != nil {
 		ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
@@ -155,22 +110,15 @@ func (c *ImageController) DeleteImage(ctx *gin.Context) {
 
 // DeleteAllUserImages 유저의 모든 이미지 삭제
 func (c *ImageController) DeleteAllUserImages(ctx *gin.Context) {
-	role := ctx.GetString("role")
-	isAdmin := (role == "ADMIN")
-
 	var userID uint
-	if isAdmin { // 관리자 권한이면 userID 파라미터를 받아서 삭제
-		id, err := strconv.ParseUint(ctx.Param("userID"), 10, 32)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 userID 파라미터입니다"})
-			return
-		}
-		userID = uint(id)
+	if c.isAdmin(ctx) {
+		userIDParam := ctx.Param("userID")
+		userID, _ = c.parseAndValidateID(userIDParam)
 	} else {
 		userID = ctx.GetUint("userID")
 	}
 
-	if err := c.imageService.DeleteAllImagesByUser(userID); err != nil {
+	if err := c.imageService.DeleteAllImagesByUserID(userID); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -179,105 +127,73 @@ func (c *ImageController) DeleteAllUserImages(ctx *gin.Context) {
 
 // GetCategoriesByImageID 특정 이미지의 카테고리 조회
 func (c *ImageController) GetCategoriesByImageID(ctx *gin.Context) {
-	role := ctx.GetString("role")
-	userID := ctx.GetUint("userID")
-	imageID, err := strconv.ParseUint(ctx.Param("imageID"), 10, 32)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 userID 파라미터입니다"})
-		return
-	}
+	imageIDParam := ctx.Param("imageID")
+	imageID, _ := c.parseAndValidateID(imageIDParam)
 
-	if role == "USER" {
-		categories, err := c.imageService.GetCategoriesByImageIDAndUserID(uint(imageID), userID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusOK, categories)
+	categories, err := c.imageService.GetCategoriesByImageIDAndUserID(imageID, ctx.GetUint("userID"), c.isAdmin(ctx))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	} else {
-		categories, err := c.imageService.GetCategoriesByImageID(uint(imageID))
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusOK, categories)
 	}
+	ctx.JSON(http.StatusOK, categories)
+	return
 }
 
 // GetImagesByCategoryID - 특정 카테고리를 갖는 이미지 조회
 func (c *ImageController) GetImagesByCategoryID(ctx *gin.Context) {
-	role := ctx.GetString("role")
-	userID := ctx.GetUint("userID")
-	categoryID, err := strconv.ParseUint(ctx.Param("categoryID"), 10, 32)
+	categoryIDParam := ctx.Param("categoryID")
+	categoryID, _ := c.parseAndValidateID(categoryIDParam)
+
+	images, err := c.imageService.GetImagesByCategoryIDAndUserID(categoryID, ctx.GetUint("userID"), c.isAdmin(ctx))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "잘못된 categoryID 파라미터입니다"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	if role == "USER" {
-		images, err := c.imageService.GetImagesByCategoryIDAndUserID(uint(categoryID), userID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		ctx.JSON(http.StatusOK, images)
-		return
-	} else {
-		images, err := c.imageService.GetImagesByCategoryID(uint(categoryID))
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusOK, images)
-	}
+	ctx.JSON(http.StatusOK, images)
 }
 
-// 이미지에 카테고리 추가
+// AddCategoryToImage 이미지에 카테고리 추가
 func (c *ImageController) AddCategoryToImage(ctx *gin.Context) {
-	userID := ctx.GetUint("userID")
-	role := ctx.GetString("role")
+	categoryIDParam := ctx.Param("categoryID")
+	categoryID, _ := c.parseAndValidateID(categoryIDParam)
+	imageIDParam := ctx.Param("imageID")
+	imageID, _ := c.parseAndValidateID(imageIDParam)
 
-	imageID, _ := strconv.ParseUint(ctx.Param("imageID"), 10, 32)
-	categoryID, _ := strconv.ParseUint(ctx.Param("categoryID"), 10, 32)
-
-	if role == "USER" {
-		if err := c.imageService.AddCategoryToImageByUser(uint(imageID), uint(categoryID), userID); err != nil {
-			ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-			return
-		}
-
-		ctx.JSON(http.StatusOK, gin.H{"message": "이미지에 카테고리가 추가됐습니다"})
-	} else {
-		if err := c.imageService.AddCategoryToImageByAdmin(uint(imageID), uint(categoryID)); err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		ctx.JSON(http.StatusOK, gin.H{"message": "이미지에 카테고리가 추가됐습니다"})
+	if err := c.imageService.AddCategoryToImageByImageIDAndCategoryID(imageID, categoryID, ctx.GetUint("userID"), c.isAdmin(ctx)); err != nil {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
 	}
+	ctx.JSON(http.StatusOK, gin.H{"message": "이미지에 카테고리가 추가됐습니다"})
 }
 
-// 이미지에서 카테고리 삭제
+// RemoveCategoryFromImage 이미지에서 카테고리 삭제
 func (c *ImageController) RemoveCategoryFromImage(ctx *gin.Context) {
-	userID := ctx.GetUint("userID")
-	role := ctx.GetString("role")
+	categoryIDParam := ctx.Param("categoryID")
+	categoryID, _ := c.parseAndValidateID(categoryIDParam)
+	imageIDParam := ctx.Param("imageID")
+	imageID, _ := c.parseAndValidateID(imageIDParam)
 
-	imageID, _ := strconv.ParseUint(ctx.Param("imageID"), 10, 32)
-	categoryID, _ := strconv.ParseUint(ctx.Param("categoryID"), 10, 32)
-
-	if role == "USER" {
-		if err := c.imageService.RemoveCategoryFromImageByUser(uint(imageID), uint(categoryID), userID); err != nil {
-			ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusOK, gin.H{"message": "이미지에서 카테고리를 삭제했습니다"})
-	} else {
-		if err := c.imageService.RemoveCategoryFromImageByAdmin(uint(imageID), uint(categoryID)); err != nil {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusOK, gin.H{"message": "이미지에서 카테고리를 삭제했습니다"})
+	if err := c.imageService.RemoveCategoryFromImageByImageIDAndCategoryID(imageID, categoryID, ctx.GetUint("userID"), c.isAdmin(ctx)); err != nil {
+		ctx.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
 	}
+	ctx.JSON(http.StatusOK, gin.H{"message": "이미지에서 카테고리를 삭제했습니다"})
+}
+
+// isAdmin - 관리자 권한인지 확인
+func (c *ImageController) isAdmin(ctx *gin.Context) bool {
+	role := ctx.GetString("role")
+	return role == "ADMIN"
+}
+
+// parseAndValidateID - userID 파라미터 파싱 및 유효성 검사
+func (c *ImageController) parseAndValidateID(paramID string) (uint, error) {
+	if paramID == "" {
+		return 0, fmt.Errorf("파라미터가 비어 있습니다")
+	}
+	id, err := strconv.ParseUint(paramID, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("잘못된 파라미터입니다")
+	}
+	return uint(id), nil
 }

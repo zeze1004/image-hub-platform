@@ -29,7 +29,7 @@ func main() {
 	{
 		userAPI.POST("/upload", imageController.UploadImage)
 		userAPI.GET("/thumbnail/:imageID/", imageController.GetThumbnail) // 썸네일 조회 엔드포인트
-		userAPI.GET("/images", imageController.GetImages)
+		userAPI.GET("/images", imageController.GetImagesByUserID)
 		userAPI.GET("/images/:imageID/", imageController.GetImageByID)
 		// 이미지 삭제
 		userAPI.DELETE("/images", imageController.DeleteAllUserImages)
@@ -48,9 +48,9 @@ func main() {
 	adminAPI.Use(middlewares.RequireAdminRole()) // 관리자 권한 미들웨어
 	{
 		adminAPI.POST("/upload/:userID/", imageController.UploadImage)
-		adminAPI.GET("/images", imageController.GetAdminImages)
-		adminAPI.GET("users/:userID/images", imageController.GetAdminImages)
-		adminAPI.GET("/images/:imageID/", imageController.GetAdminImageByID)
+		adminAPI.GET("/images", imageController.GetAllImagesByAdmin)
+		adminAPI.GET("users/:userID/images", imageController.GetImagesByUserID)
+		adminAPI.GET("/images/:imageID/", imageController.GetImageByID)
 		// 이미지 삭제
 		adminAPI.DELETE("/users/:userID/images", imageController.DeleteAllUserImages)
 		adminAPI.DELETE("/images/:imageID/", imageController.DeleteImage)
