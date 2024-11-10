@@ -5,13 +5,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type CategoryRepository interface {
-	GetCategoriesByName(names []string) ([]models.Category, error)
-	GetCategoriesByImageID(imageID uint) ([]models.Category, error)
-	GetImagesByCategoryID(categoryID uint) ([]models.Image, error)
-	GetImagesByCategoryIDAndUserID(categoryID, userID uint) ([]models.Image, error)
-}
-
 type categoryRepository struct {
 	db *gorm.DB
 }

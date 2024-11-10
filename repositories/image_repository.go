@@ -5,15 +5,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type ImageRepository interface {
-	CreateImage(image *models.Image) error
-	GetImageByID(id uint) (*models.Image, error)
-	GetImagesByUserID(userID uint) ([]models.Image, error)
-	GetAllImages() ([]models.Image, error)
-	DeleteImage(imageID uint) error
-	DeleteImagesByUserID(userID uint) error
-}
-
 type imageRepository struct {
 	db *gorm.DB
 }
