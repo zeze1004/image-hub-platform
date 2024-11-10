@@ -8,7 +8,7 @@ type UserRepository interface {
 }
 
 type ImageRepository interface {
-	CreateImage(image *models.Image) error
+	CreateImageMetaData(image *models.Image) error
 	GetImageByID(id uint) (*models.Image, error)
 	GetImagesByUserID(userID uint) ([]models.Image, error)
 	GetAllImages() ([]models.Image, error)

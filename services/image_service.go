@@ -71,7 +71,7 @@ func (s *imageService) UploadImage(ctx *gin.Context, fileName, description strin
 		UserID:        userID,
 	}
 
-	if err := s.imageRepo.CreateImage(&uploadImage); err != nil {
+	if err := s.imageRepo.CreateImageMetaData(&uploadImage); err != nil {
 		return nil, fmt.Errorf("이미지 메타데이터를 저장하는데 실패했습니다: %v", err)
 	}
 
@@ -188,6 +188,12 @@ func (s *imageService) DeleteImageByID(imageID uint, userID uint, isAdmin bool) 
 
 // DeleteAllImagesByUserID user의 모든 이미지 삭제
 func (s *imageService) DeleteAllImagesByUserID(userID uint) error {
+	// sync.Pool을 사용하여 고루틴에서 사용하는 객체 재사용해서 메모리 할당, 해제 최소화
+	var pool = sync.Pool{
+		New: func() interface{} {
+			return new(models.Image)
+		},
+	}
 	images, err := s.imageRepo.GetImagesByUserID(userID)
 	if err != nil {
 		return err
@@ -202,14 +208,17 @@ func (s *imageService) DeleteAllImagesByUserID(userID uint) error {
 	errChan := make(chan error, len(images)) // 고루틴 에러를 수집할 채널
 	var wg sync.WaitGroup
 
-	for _, image := range images {
+	for _, img := range images {
 		wg.Add(1)
 		go func(img models.Image) {
 			defer wg.Done()
-			if err := s.deleteImageFiles(&img); err != nil {
+			image := pool.Get().(*models.Image)
+			*image = img
+			if err := s.deleteImageFiles(image); err != nil {
 				errChan <- err // 에러 발생 시 채널에 전송
 			}
-		}(image)
+			pool.Put(image)
+		}(img)
 	}
 
 	// 모든 고루틴이 종료되면 채널 닫기
@@ -218,10 +227,6 @@ func (s *imageService) DeleteAllImagesByUserID(userID uint) error {
 		close(errChan)
 	}()
 
-	// 첫 번째 에러 반환
-	if err := <-errChan; err != nil {
-		return err
-	}
 	return nil
 }
 

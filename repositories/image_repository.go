@@ -13,7 +13,7 @@ func NewImageRepository(db *gorm.DB) ImageRepository {
 	return &imageRepository{db: db}
 }
 
-func (r *imageRepository) CreateImage(image *models.Image) error {
+func (r *imageRepository) CreateImageMetaData(image *models.Image) error {
 	return r.db.Create(image).Error
 }
 
